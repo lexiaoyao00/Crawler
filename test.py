@@ -8,11 +8,11 @@ import re
 class Post(BaseModel):
     id: int
     tags: List[str]
-    original_url: str = None
-    artist: List[str] = None
-    copyrights: List[str] = None
-    character: List[str] = None
-    meta: List[str] = None
+    source_url: str|None = None
+    artist: List[str]|None = None
+    copyrights: List[str]|None = None
+    character: List[str]|None = None
+    meta: List[str]|None = None
     size: str|None = None
     type: str|None = None
     dimensions :str|None = None
@@ -29,7 +29,6 @@ class DanbooruCrawler():
             'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
             'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8,zh-TW;q=0.7,en-US;q=0.6',
             'priority': 'u=0, i',
-            'referer': 'https://danbooru.donmai.us/posts?page=2',
             'sec-ch-ua': '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
             'sec-ch-ua-mobile': '?0',
             'sec-ch-ua-platform': '"Windows"',
@@ -56,8 +55,8 @@ class DanbooruCrawler():
             tags = sel.css('ul.general-tag-list li.flex::attr(data-tag-name)').getall()
             meta = sel.css('ul.meta-tag-list li.flex::attr(data-tag-name)').getall()
 
-            file_info_text = sel.css('#post-info-size a:first-child::text').get()
-            match = re.match(r'(\d+\s*[KMG]B)\s*(\.[\w]+)', file_info_text)
+            file_info_text = sel.css('#post-info-size a:nth-child(1)::text').get()
+            match = re.match(r'(\d+(?:\.\d+)?\s*[KMG]B)\s*(\.[\w]+)', file_info_text)
 
             if match:
                 size = match.group(1)
@@ -68,10 +67,10 @@ class DanbooruCrawler():
 
             dimensions = sel.css('li#post-info-size::text').getall()[1].strip()
 
-            original_url = sel.css('a.image-view-original-link::attr(href)').get()
+            source_url = sel.css('#post-info-size a:nth-child(1)::attr(href)').get()
             # print(tags)
 
-            return Post(id=post_id, tags=tags, original_url=original_url, artist=artist, copyrights=copyrights, character=character, meta=meta, size=size, type=type, dimensions=dimensions)
+            return Post(id=post_id, tags=tags, source_url=source_url, artist=artist, copyrights=copyrights, character=character, meta=meta, size=size, type=type, dimensions=dimensions)
 
         else:
             print('response error:',res.status_code)
@@ -79,7 +78,7 @@ class DanbooruCrawler():
 
 if __name__ == '__main__':
     dc = DanbooruCrawler()
-    post = dc.get_post(9360223)
+    post = dc.get_post(9358913)
     post.save_to_json('post.json')
 
-    print('post',post.id,'original_url is ',post.original_url)
+    # print('post',post.id,'original_url is ',post.source_url)
