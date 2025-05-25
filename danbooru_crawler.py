@@ -5,7 +5,7 @@ from typing import List
 import re
 
 
-class Post(BaseModel):
+class PostInfo(BaseModel):
     id: int
     tags: List[str]
     source_url: str|None = None
@@ -43,8 +43,19 @@ class DanbooruCrawler():
             '_danbooru2_session': 'mLCHs0Mzz6ueB0JRe2mSw0vIwbVSgzEcsCNAVItjUCwGtES9IriSs0BjN3fdkkA10FPWJ21S%2Fj%2BTsKQI5a0IoP3q01UnxSscdBTMtLvfMq%2BIuCDqMDHkvVg%2BjdAxtXaO5Z0%2BKCeniPdeG2%2FJJLOCBMqEoLRBRpZKu2iqv2ferkEOC2XVkTaVIpsKBV3QS%2FofbQ3jriTa2jFbtehPus08v2AaLLO4Dv89ZkVTc9K1o4Ytac4TwZRpJOTnu6FvK0NybDp4izPs3WrrCBD%2B1%2BOeC0AYhvmryZjjWjAYvmX%2BA3KutDsKZjekDyiaj2Ny0RYpZxaiCS14tmd5EGFSKSN5Fl0gNsc8S5OndJLYr6eqWUSP2L2%2Bttw5LCsTR1mSK%2FSzcGP5639LVmx8b1q3RjOQippoX%2FcwhIL3--ERLrY0K%2Bj1SQH1ge--%2BV5xffiATmAgvDXkqGGW%2Fg%3D%3D',
         }
 
-    def get_post(self, post_id: int):
-        # post_info = Post(id=post_id)
+    def get_posts(self):
+        res = self.session.get(url=self.base_url, headers=self.headers, cookies=self.cookies)
+        if res.status_code == 200:
+
+            sel = Selector(text=res.text)
+            post_ids = sel.css('div.posts-container a.post-preview-link::attr(href)').getall()
+            # print(post_ids)
+            return post_ids
+
+        else:
+            print('response error:',res.status_code)
+
+    def get_post_detail(self, post_id: int):
         url = f'{self.base_url}/posts/{post_id}'
         res = self.session.get(url=url, headers=self.headers, cookies=self.cookies)
         if res.status_code == 200:
@@ -70,15 +81,27 @@ class DanbooruCrawler():
             source_url = sel.css('#post-info-size a:nth-child(1)::attr(href)').get()
             # print(tags)
 
-            return Post(id=post_id, tags=tags, source_url=source_url, artist=artist, copyrights=copyrights, character=character, meta=meta, size=size, type=type, dimensions=dimensions)
+            return PostInfo(id=post_id, tags=tags, source_url=source_url, artist=artist, copyrights=copyrights, character=character, meta=meta, size=size, type=type, dimensions=dimensions)
 
         else:
             print('response error:',res.status_code)
 
+    def download_file(self, url: str, filename: str):
+        res = self.session.get(url=url, headers=self.headers, cookies=self.cookies)
+        if res.status_code == 200:
+            with open(filename, 'wb') as f:
+                f.write(res.content)
+        else:
+            print('response error:', res.status_code)
+
 
 if __name__ == '__main__':
     dc = DanbooruCrawler()
-    post = dc.get_post(9358913)
-    post.save_to_json('post.json')
+    post_list = dc.get_posts()
+    print(f'total {len(post_list)} posts')
+    print(post_list)
+    # post = dc.get_post_detail(9358913)
+    # post.save_to_json('post.json')
+    # dc.download_file(post.source_url, 'test'+post.type)
 
     # print('post',post.id,'original_url is ',post.source_url)
