@@ -1,4 +1,4 @@
-from streamlit_app import run_streamlit
+from Home import run_streamlit
 
 
 if __name__ == "__main__":
