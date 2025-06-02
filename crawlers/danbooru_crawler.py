@@ -1,9 +1,8 @@
 import curl_cffi
 from parsel import Selector
 from pydantic import BaseModel
-from typing import List
+from typing import List,Literal
 import re
-
 
 class PostInfo(BaseModel):
     id: int
@@ -26,6 +25,7 @@ class PostInfo(BaseModel):
 class DanbooruCrawler():
     def __init__(self):
         self.base_url = 'https://danbooru.donmai.us'
+        self.polular_url = 'https://danbooru.donmai.us/explore/posts/popular'
         self.session = curl_cffi.Session()
         self.headers = {
             'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
@@ -45,7 +45,7 @@ class DanbooruCrawler():
             '_danbooru2_session': 'mLCHs0Mzz6ueB0JRe2mSw0vIwbVSgzEcsCNAVItjUCwGtES9IriSs0BjN3fdkkA10FPWJ21S%2Fj%2BTsKQI5a0IoP3q01UnxSscdBTMtLvfMq%2BIuCDqMDHkvVg%2BjdAxtXaO5Z0%2BKCeniPdeG2%2FJJLOCBMqEoLRBRpZKu2iqv2ferkEOC2XVkTaVIpsKBV3QS%2FofbQ3jriTa2jFbtehPus08v2AaLLO4Dv89ZkVTc9K1o4Ytac4TwZRpJOTnu6FvK0NybDp4izPs3WrrCBD%2B1%2BOeC0AYhvmryZjjWjAYvmX%2BA3KutDsKZjekDyiaj2Ny0RYpZxaiCS14tmd5EGFSKSN5Fl0gNsc8S5OndJLYr6eqWUSP2L2%2Bttw5LCsTR1mSK%2FSzcGP5639LVmx8b1q3RjOQippoX%2FcwhIL3--ERLrY0K%2Bj1SQH1ge--%2BV5xffiATmAgvDXkqGGW%2Fg%3D%3D',
         }
 
-    def get_posts(self, user_params:dict|None = None , max_page_count:int = 1):
+    def get_posts(self, user_params:dict|None = None , max_page_count:int = 1, url_type : Literal['normal','popular'] = 'normal' ):
         page_count = 1
         if user_params is None:
             user_params = {}
@@ -57,7 +57,10 @@ class DanbooruCrawler():
                 page_num = params['page']
                 params.update({'page':page_num + page_count - 1})
 
-            res = self.session.get(url=self.base_url, headers=self.headers, cookies=self.cookies,params=params)
+
+            url = self.polular_url if url_type == 'popular' else self.base_url
+            print(f'url {url} params {params}')
+            res = self.session.get(url=url, headers=self.headers, cookies=self.cookies,params=params)
             if res.status_code != 200:
                 print(f'page {page_count} response error:{res.status_code}')
                 return None
@@ -67,7 +70,7 @@ class DanbooruCrawler():
             post_preview_container = sel.css('div.posts-container div.post-preview-container')
 
             for post in post_preview_container:
-                post_id = int(post.css('a.post-preview-link::attr(href)').get().split('/')[-1])
+                post_id = int(post.css('a.post-preview-link::attr(href)').get().split('/')[-1].split('?')[0])
                 post_pre_img = post.css('img.post-preview-image::attr(src)').get()
 
                 # print(post_id,post_pre_img)

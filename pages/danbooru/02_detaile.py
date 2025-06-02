@@ -40,6 +40,8 @@ def danbooru_show_detaile(id:int):
     st.text_area('Tags:', ','.join(post.tags),key=f"tags_{id}",height=300)
 
 
+
+
 st.title("post detail")
 
 if 'danbooru' not in st.session_state:
