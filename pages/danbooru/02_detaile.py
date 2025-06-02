@@ -32,8 +32,8 @@ def danbooru_show_detaile(id:int):
 
     col1, col2 = st.columns([1, 3])
     with col1:
-        if st.button("Download", key=f"dl_btn_{id}",on_click=danbooru_download_file()):
-            pass
+        if st.button("Download", key=f"dl_btn_{id}"):
+            danbooru_download_file()
     with col2:
         st.link_button("Source", post.get_url())
 
@@ -57,7 +57,7 @@ st.number_input("Post ID",
                 min_value=0,
                 step=1,
                 value=st.session_state.post_id,
-                key="post_id")
+                key="post_id_input")
 
 st.success(f"Current Post ID = {st.session_state.post_id}")
 
