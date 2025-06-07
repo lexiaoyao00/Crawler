@@ -1,5 +1,5 @@
 import streamlit as st
-from crawlers.danbooru_crawler import DanbooruCrawler
+from crawlers.danbooru import DanbooruCrawler
 
 
 

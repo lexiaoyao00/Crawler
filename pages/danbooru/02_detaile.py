@@ -2,7 +2,7 @@ import streamlit as st
 from pathlib import Path
 import time
 
-from crawlers.danbooru_crawler import DanbooruCrawler
+from crawlers.danbooru import DanbooruCrawler
 
 
 def danbooru_download_file():

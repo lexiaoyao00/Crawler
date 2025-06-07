@@ -59,7 +59,6 @@ class DanbooruCrawler():
 
 
             url = self.polular_url if url_type == 'popular' else self.base_url
-            print(f'url {url} params {params}')
             res = self.session.get(url=url, headers=self.headers, cookies=self.cookies,params=params)
             if res.status_code != 200:
                 print(f'page {page_count} response error:{res.status_code}')
