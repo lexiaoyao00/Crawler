@@ -167,12 +167,15 @@ class Hanime1Crawler():
 
 
     def _getPostDownLoadInfo(self,sel:Selector):
-        download_page = sel.css('a#downloadBtn::attr(href)').get()
+        download_page_url = sel.css('a#downloadBtn::attr(href)').get()
         result = []
-        if download_page:
-            logger.debug(f'get post download info success, url: {download_page}')
-            response = self.session.get(download_page, headers=self.headers, params=None, impersonate="chrome")
+        if download_page_url:
+            response = self.session.get(download_page_url, headers=self.headers, params=None, impersonate="chrome")
             download_sel = Selector(text=response.text)
+            if response.status_code != 200:
+                logger.warning(f'get post download info failed, status code: {response.status_code},  url: {response.url}')
+                return None
+
             table = download_sel.css('table.download-table')
             if table:
                 trs = table.css('tr')
@@ -234,19 +237,44 @@ class Hanime1Crawler():
             return None
 
     def getPostDownloadInfo(self,post_id:str|int):
-        # response = self.session.get(self.detail_url.format(post_id), headers=self.headers, impersonate="chrome")
-        pass
+        params = [('v', post_id)]
+        response = self.session.get(self.download_url, headers=self.headers,params=params, impersonate="chrome")
+        if response.status_code != 200:
+            logger.warning(f'get post download info failed, status code: {response.status_code},  url: {response.url}')
+            return None
+
+        result :List[HanimePostDownloadInfo] = []
+        sel = Selector(text=response.text)
+        table = sel.css('table.download-table')
+        if table:
+            trs = table.css('tr')
+            for tr in trs:
+                if not tr.css('td > a.exoclick-popunder.juicyads-popunder').get():
+                    continue
+                quality = tr.css('td:nth-child(2)::text').get().strip()
+                video_type = tr.css('td:nth-child(3)::text').get()
+                download_url = tr.css('td:nth-child(5) > a.exoclick-popunder.juicyads-popunder::attr(data-url)').get()
+                logger.debug(f'get post download info success, quality: {quality}, video_type: {video_type}, url: {download_url}')
+                result.append(HanimePostDownloadInfo(quality=quality, video_type=video_type, url=download_url))
+
+        return result
 
 if __name__ == '__main__':
     crawler = Hanime1Crawler()
     types = crawler.getAnimeTypes()
 
-    # id = 105531
-    id = 105286
+    id = 105531
+    # id = 105286
     post_detail = crawler.getPostDetail(id)
 
     with open('hanime1.json','w',encoding='utf-8') as f:
         json.dump(post_detail.model_dump(),f,ensure_ascii=False,indent=4)
+
+    # downloadInfo = crawler.getPostDownloadInfo(id)
+    # if downloadInfo:
+    #     for info in downloadInfo:
+    #         print(info.model_dump())
+
 
 
     # param = HanimeSearchParams(genre=types[1])
