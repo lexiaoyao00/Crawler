@@ -1,11 +1,16 @@
 import curl_cffi
 from parsel import Selector
 from pydantic import BaseModel
-from typing import List,Literal,Dict
+from typing import List, Iterator, Optional
 from loguru import logger
-from urllib.parse import urlencode, urlparse, urlunparse
-import json
+from pathlib import Path
+import sys
+import time
 
+
+logger.remove()
+logger.add(sys.stderr, level="INFO")
+# logger.add('logs/hanime1_debug.log',level='DEBUG')
 
 class HanimeSearchParams(BaseModel):
     genre:str
@@ -37,20 +42,55 @@ class HanimePageInfo(BaseModel):
     content:str
     max_page:int
 
-class HanimePostDownloadInfo(BaseModel):
+class IHanime(BaseModel):
+    def to_json(self,filename:str = 'hanime.json'):
+
+        path = Path('output/' + filename)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(self.model_dump_json(indent=4),encoding='utf-8')
+
+class HanimePostDownloadInfo(IHanime):
     quality:str
     video_type:str
     url:str
 
-class HanimePostInfo(BaseModel):
+    # def to_json(self,filename:str = 'hanime_post_download_info.json'):
+    #     with open(filename,'w',encoding='utf-8') as f:
+    #         json.dump(self.model_dump(),f,ensure_ascii=False,indent=4)
+
+class HanimeDownloadList(IHanime):
+    dowloads : List[HanimePostDownloadInfo] = []
+
+    # def to_json(self,filename:str = 'hanime_download_list.json'):
+    #     with open(filename,'w',encoding='utf-8') as f:
+    #         json.dump(self.model_dump(),f,ensure_ascii=False,indent=4)
+
+class HanimePostInfo(IHanime):
     id:int
     title:str
     url:str
     pre_img:str
 
+    # def to_json(self,filename:str = 'hanime_post_info.json'):
+    #     with open(filename,'w',encoding='utf-8') as f:
+    #         json.dump(self.model_dump(),f,ensure_ascii=False,indent=4)
 
 
-class HanimePostDetail(BaseModel):
+class HanimePostList(IHanime):
+    posts:List[HanimePostInfo] = []
+
+    # def to_json(self,filepath:str = 'hanime_post_list.json'):
+
+    #     path = Path(filepath)
+    #     path.parent.mkdir(parents=True, exist_ok=True)
+    #     path.write_text(self.model_dump_json(indent=4),encoding='utf-8')
+
+    def merge(self, other_collection: 'HanimePostList'):
+        """将另一个集合的所有帖子添加到当前集合中"""
+        self.posts.extend(other_collection.posts)
+        return self
+
+class HanimePostDetail(IHanime):
     id:int
     title:str
     artist:str
@@ -58,17 +98,12 @@ class HanimePostDetail(BaseModel):
     brief:str
     watch_url:str
     tags:List[str]
-    download_infos:List[HanimePostDownloadInfo]|None=None
-    play_list:List[HanimePostInfo]|None=None
+    download_infos:HanimeDownloadList|None=None
+    play_list:HanimePostList|None=None
 
-class HanimePostList(BaseModel):
-    posts:List[HanimePostInfo]
-    total_page:int
-
-def build_url(base_url, params):
-    url_parts = list(urlparse(base_url))
-    url_parts[4] = urlencode(params)
-    return urlunparse(url_parts)
+    # def to_json(self,filename:str = 'hanime_post_detail.json'):
+    #     with open(filename,'w',encoding='utf-8') as f:
+    #         json.dump(self.model_dump(),f,ensure_ascii=False,indent=4)
 
 class Hanime1Crawler():
     def __init__(self):
@@ -139,9 +174,10 @@ class Hanime1Crawler():
             logger.error(f'get post failed, status code: {response.status_code},url: {response.url}')
             return None
 
-    def getPostInfo(self,page_content:str):
+    def getPostInfo(self,page_content:str) -> HanimePostList|None:
         sel = Selector(text=page_content)
         items = sel.css('div.home-rows-videos-wrapper a:not([target])')
+        posts : List[HanimePostInfo] = []
         for item in items:
             img = item.css('img::attr(src)').get()
             url = item.css('::attr(href)').get()
@@ -149,10 +185,14 @@ class Hanime1Crawler():
             if url:
                 id = url.split('=')[-1]
                 # logger.debug(f'get post success, id: {id}, title: {title}, url: {url}, img: {img}')
-                info = HanimePostInfo(id=id, title=title, url=url, pre_img=img)
-                yield info
+                posts.append(HanimePostInfo(id=id, title=title, url=url, pre_img=img))
 
-    def getAllPagePosts(self,param : HanimeSearchParams):
+        if posts:
+            return HanimePostList(posts=posts)
+        else:
+            return None
+
+    def getAllPagePosts(self,param : HanimeSearchParams) -> Iterator[Optional[HanimePostList]]:
         page_info = self.getPageInfo(param)
         if not page_info:
             logger.error(f'get page info failed, param: {param.model_dump()}')
@@ -162,13 +202,15 @@ class Hanime1Crawler():
             param.page = page
             page_info = self.getPageInfo(param)
             if page_info:
-                post_list = list(self.getPostInfo(page_info.content))
+                post_list : HanimePostList|None = self.getPostInfo(page_info.content)
                 yield post_list
 
+                time.sleep(1)
 
-    def _getPostDownLoadInfo(self,sel:Selector):
+
+    def _getPostDownLoadInfo(self,sel:Selector) -> HanimeDownloadList|None:
         download_page_url = sel.css('a#downloadBtn::attr(href)').get()
-        result = []
+        result :List[HanimePostDownloadInfo] = []
         if download_page_url:
             response = self.session.get(download_page_url, headers=self.headers, params=None, impersonate="chrome")
             download_sel = Selector(text=response.text)
@@ -188,7 +230,7 @@ class Hanime1Crawler():
                     logger.debug(f'get post download info success, quality: {quality}, video_type: {video_type}, url: {download_url}')
                     result.append(HanimePostDownloadInfo(quality=quality, video_type=video_type, url=download_url))
 
-            return result
+            return HanimeDownloadList(dowloads=result)
         else:
             logger.warning(f'get post download info failed, no download url')
             return None
@@ -207,12 +249,12 @@ class Hanime1Crawler():
                 logger.debug(f'get PlayeList success, id: {id}, title: {title}, url: {url}, img: {pre_img}')
                 resutl.append(HanimePostInfo(id=id, title=title, url=url,pre_img=pre_img))
 
-            return resutl
+            return HanimePostList(posts=resutl)
         else:
             logger.warning(f'get PlayeList failed, no playlist items')
             return None
 
-    def getPostDetail(self,post_id:str|int):
+    def getPostDetail(self,post_id:str|int) -> HanimePostDetail|None:
         params = [('v', post_id)]
         response = self.session.get(self.watch_url, headers=self.headers,params=params, impersonate="chrome")
 
@@ -222,7 +264,7 @@ class Hanime1Crawler():
             artist = sel.css('div.video-details-wrapper a#video-artist-name::text').get().strip()
             video_type = sel.css('div.video-details-wrapper div.hidden-xs a::text').get().strip()
             title = sel.css('div.video-description-panel div:not([class])::text').get()
-            brief = sel.css('div.video-description-panel div.video-caption-text::text').get().strip()
+            brief = sel.css('div.video-description-panel div.video-caption-text::text').get().strip().replace('\r','').replace('\n','')
             tags = sel.css('div.video-details-wrapper.video-tags-wrapper div.single-video-tag a::text').getall()
             tags = [tag.replace('\xa0', '') for tag in tags]
             play_list = self._getPostPlayeList(sel)
@@ -257,48 +299,30 @@ class Hanime1Crawler():
                 logger.debug(f'get post download info success, quality: {quality}, video_type: {video_type}, url: {download_url}')
                 result.append(HanimePostDownloadInfo(quality=quality, video_type=video_type, url=download_url))
 
-        return result
+        return HanimeDownloadList(result)
 
 if __name__ == '__main__':
     crawler = Hanime1Crawler()
     types = crawler.getAnimeTypes()
+    param = HanimeSearchParams(genre= '裏番')
 
-    id = 105531
-    # id = 105286
-    post_detail = crawler.getPostDetail(id)
+    # page_info : HanimePageInfo = crawler.getPageInfo(HanimeSearchParams(param)
 
-    with open('hanime1.json','w',encoding='utf-8') as f:
-        json.dump(post_detail.model_dump(),f,ensure_ascii=False,indent=4)
-
-    # downloadInfo = crawler.getPostDownloadInfo(id)
-    # if downloadInfo:
-    #     for info in downloadInfo:
-    #         print(info.model_dump())
-
-
-
-    # param = HanimeSearchParams(genre=types[1])
-    # page_info  = crawler.getPageInfo(param)
     # if page_info:
-    #     # crawler.obtainAnimeTags(content)
-    #     post_info= list(crawler.getPostInfo(page_info.content))
-    #     post_list = HanimePostList(posts=post_info,total_page=page_info.max_page)
-    #     # print(len(page_info))
-    #     # print(post_list.model_dump())
-    #     with open('hanime1.json','w',encoding='utf-8') as f:
-    #         json.dump(post_list.model_dump(),f,ensure_ascii=False,indent=4)
+    #     posts_info :HanimePostList  = crawler.getPostInfo(page_info.content)
+    #     if posts_info:
+    #         posts_info.to_json('posts_info.json')
 
-    # all_post_list = []
-    # max_page = 0
-    # if page_info:
-    #     max_page = page_info.max_page
+    #     # for post in posts_info.posts:
+    #     #     post_detail:HanimePostDetail = crawler.getPostDetail(post.id)
+    #     #     if post_detail:
+    #     #         post_detail.to_json(f'post_detail_{post.id}.json')
+    #     #     else:
+    #     #         logger.error(f'get post detail failed, id: {post.id}')
 
-    #     for post_list in crawler.getAllPagePosts(param):
-    #         # print(post_list)
-    #         all_post_list.extend(post_list)
+    posts_list = HanimePostList()
 
-    # posts = HanimePostList(posts=all_post_list,total_page=max_page)
+    for  posts in crawler.getAllPagePosts(param):
+        posts_list.merge(posts)
 
-    # with open('hanime1.json','w',encoding='utf-8') as f:
-    #     json.dump(posts.model_dump(),f,ensure_ascii=False,indent=4)
-
+    posts_list.to_json('all_posts_list.json')

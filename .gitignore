@@ -1,3 +1,5 @@
 venv
 Downloads
+output
+logs
 __pycache__
